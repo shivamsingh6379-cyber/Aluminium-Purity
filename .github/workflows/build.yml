@@ -1,0 +1,72 @@
+name: Build Android APK
+
+# ==========================================
+# 🛠️ HAR NAYI APP KE LIYE YAHAN VALUES CHANGE KAREIN:
+# ==========================================
+env:
+  APP_DISPLAY_NAME: "Aluminium purity"       # Phone screen par jo naam dikhana hai
+  PACKAGE_ID: "com.shivamsingh.purity" # Unique ID: com.domain.appname (lowercase, no space)
+  OUTPUT_NAME: "Aluminium-Release-v1"     # Download file ka jo naam rakhna chahein
+# ==========================================
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare Web Assets & Install Capacitor
+        run: |
+          # Web files ke liye directory setup
+          mkdir -p www
+          cp -r index.html *.css *.js www/ 2>/dev/null || true
+          
+          # Capacitor setup
+          npm init -y
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          
+          # Initialize app with dynamic env variables
+          npx cap init "${{ env.APP_DISPLAY_NAME }}" "${{ env.PACKAGE_ID }}" --web-dir www
+          npx cap add android
+
+          # Setup App Icon
+          if [ -f icon.png ]; then
+            for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p android/app/src/main/res/$dir
+              cp icon.png android/app/src/main/res/$dir/ic_launcher.png
+              cp icon.png android/app/src/main/res/$dir/ic_launcher_round.png
+              cp icon.png android/app/src/main/res/$dir/ic_launcher_foreground.png
+            done
+          fi
+
+          npx cap copy android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Generated APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.OUTPUT_NAME }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
